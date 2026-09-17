@@ -1,12 +1,18 @@
 /**
- * 彈出視窗：列出目前所有分頁，讓使用者勾選並匯出為 TXT / CSV。
+ * 彈出視窗：列出目前所有分頁，讓使用者勾選並匯出為 TXT / CSV / Markdown，
+ * 或透過 background.ts 上傳到 Google Drive / Google Sheets。
  */
-import { TabRecord } from "../types";
-import { downloadFile, toCsv, toTxt } from "../core/export";
-import { getTimestamp } from "../core/storage";
+import type { RuntimeMessage, RuntimeResponse, TabRecord, UploadableTab } from "../types";
+import { downloadFile, toCsv, toMarkdown, toTxt } from "../core/export";
+import { getAccessToken, getTimestamp } from "../core/storage";
 
 function isRestrictedUrl(url?: string): boolean {
-  return !url || url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("edge://");
+  return (
+    !url ||
+    url.startsWith("chrome://") ||
+    url.startsWith("chrome-extension://") ||
+    url.startsWith("edge://")
+  );
 }
 
 function truncateTitle(title: string, max = 40): string {
@@ -60,6 +66,14 @@ function getSelectedCheckboxes(): HTMLInputElement[] {
   return Array.from(document.querySelectorAll<HTMLInputElement>(".tabCheckbox:checked"));
 }
 
+function toUploadableTabs(checkboxes: HTMLInputElement[]): UploadableTab[] {
+  return checkboxes.map((cb) => ({
+    title: cb.dataset.title ?? "",
+    url: cb.value,
+    timestamp: getTimestamp(),
+  }));
+}
+
 function showError(message: string): void {
   const errorEl = document.getElementById("errorMessage");
   if (!errorEl) return;
@@ -67,14 +81,35 @@ function showError(message: string): void {
   errorEl.style.display = message ? "block" : "none";
 }
 
+function showStatus(message: string, isError = false): void {
+  const statusEl = document.getElementById("googleStatus");
+  if (!statusEl) return;
+  statusEl.textContent = message;
+  statusEl.classList.toggle("error-text", isError);
+}
+
+/** 包裝 chrome.runtime.sendMessage，取得型別化的回應 */
+async function sendRuntimeMessage(message: RuntimeMessage): Promise<RuntimeResponse> {
+  return (await chrome.runtime.sendMessage(message)) as RuntimeResponse;
+}
+
+async function refreshGoogleStatus(): Promise<void> {
+  const token = await getAccessToken();
+  showStatus(token ? "已登入 Google ✅" : "尚未登入 Google");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const tabsList = document.getElementById("tabsList") as HTMLUListElement;
   const selectAllButton = document.getElementById("selectAll") as HTMLButtonElement;
   const exportTxtButton = document.getElementById("exportTxt") as HTMLButtonElement;
   const exportCsvButton = document.getElementById("exportCsv") as HTMLButtonElement;
+  const exportMdButton = document.getElementById("exportMd") as HTMLButtonElement;
+  const googleLoginButton = document.getElementById("googleLogin") as HTMLButtonElement;
+  const uploadSelectedButton = document.getElementById("uploadSelected") as HTMLButtonElement;
   let isAllSelected = false;
 
   chrome.tabs.query({}, (tabs) => renderTabsList(tabsList, tabs));
+  void refreshGoogleStatus();
 
   selectAllButton.addEventListener("click", () => {
     isAllSelected = !isAllSelected;
@@ -98,6 +133,27 @@ document.addEventListener("DOMContentLoaded", () => {
       summary: "",
     }));
     downloadFile(toTxt(tabs), `SLinks_${getTimestamp()}.txt`, "text/plain");
+  });
+
+  exportMdButton.addEventListener("click", () => {
+    showError("");
+    const selected = getSelectedCheckboxes();
+    if (selected.length === 0) {
+      showError("請先選擇要匯出的分頁！");
+      return;
+    }
+    const exportedAt = getTimestamp();
+    const tabs: TabRecord[] = selected.map((cb) => ({
+      title: cb.dataset.title ?? "",
+      url: cb.value,
+      timestamp: exportedAt,
+      summary: "",
+    }));
+    downloadFile(
+      toMarkdown(tabs, exportedAt),
+      `SLinks_${exportedAt}.md`,
+      "text/markdown;charset=utf-8"
+    );
   });
 
   exportCsvButton.addEventListener("click", async () => {
@@ -131,6 +187,52 @@ document.addEventListener("DOMContentLoaded", () => {
     } finally {
       exportCsvButton.disabled = false;
       exportCsvButton.textContent = originalLabel;
+    }
+  });
+
+  googleLoginButton.addEventListener("click", async () => {
+    showStatus("登入中...");
+    googleLoginButton.disabled = true;
+    try {
+      const response = await sendRuntimeMessage({ action: "authenticate" });
+      if (response.success) {
+        showStatus("已登入 Google ✅");
+      } else {
+        showStatus(response.error ?? "Google 授權失敗", true);
+      }
+    } catch (error) {
+      showStatus((error as Error).message, true);
+    } finally {
+      googleLoginButton.disabled = false;
+    }
+  });
+
+  uploadSelectedButton.addEventListener("click", async () => {
+    showError("");
+    const selected = getSelectedCheckboxes();
+    if (selected.length === 0) {
+      showError("請先選擇要上傳的分頁！");
+      return;
+    }
+
+    const originalLabel = uploadSelectedButton.textContent ?? "上傳選取分頁";
+    uploadSelectedButton.disabled = true;
+    uploadSelectedButton.textContent = "上傳中...";
+    showStatus("上傳中...");
+
+    try {
+      const tabs = toUploadableTabs(selected);
+      const response = await sendRuntimeMessage({ action: "uploadTabs", tabs });
+      if (response.success) {
+        showStatus(`已成功上傳 ${tabs.length} 個分頁 ✅`);
+      } else {
+        showStatus(response.error ?? "上傳失敗", true);
+      }
+    } catch (error) {
+      showStatus((error as Error).message, true);
+    } finally {
+      uploadSelectedButton.disabled = false;
+      uploadSelectedButton.textContent = originalLabel;
     }
   });
 });

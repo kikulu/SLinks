@@ -1,22 +1,32 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-Hant">
-<head>
-  <meta charset="UTF-8" />
-  <title>Save Links</title>
-  <link rel="stylesheet" href="popup.css" />
-</head>
-<body>
-  <div class="container">
-    <h2>Select Items</h2>
-    <button id="selectAll">Select All</button>
-    <ul id="tabsList" class="list"></ul>
-    <div class="button-container">
-      <button id="exportTxt">Export Txt</button>
-      <button id="exportCsv">Export CSV</button>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Save Links</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h2>Select Items</h2>
+      <button id="selectAll">Select All</button>
+      <ul id="tabsList" class="list"></ul>
+      <div class="button-container">
+        <button id="exportTxt">Export Txt</button>
+        <button id="exportCsv">Export CSV</button>
+        <button id="exportMd">Export Markdown</button>
+      </div>
+      <p id="errorMessage" class="error"></p>
+
+      <hr />
+
+      <h3>Google 上傳</h3>
+      <div class="button-container">
+        <button id="googleLogin">登入 Google</button>
+        <button id="uploadSelected">上傳選取分頁</button>
+      </div>
+      <p id="googleStatus" class="status"></p>
+
+      <script src="popup.js"></script>
     </div>
-    <p id="errorMessage" class="error"></p>
-    <p id="lastUpload" class="error"></p>
-    <script src="popup.js"></script>
-  </div>
-</body>
+  </body>
 </html>

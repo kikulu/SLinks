@@ -1,19 +1,19 @@
 {
-    "manifest_version": 3,
-    "name": "SLinks – Tabs Exporter",
-    "version": "1.1.0",
-    "description": "選取目前開啟的分頁，匯出為 CSV / TXT，或上傳到 Google Drive。",
-    "permissions": ["scripting", "tabs", "storage", "identity"],
-    "host_permissions": ["https://*/*", "http://*/*"],
-    "background": {
-        "service_worker": "background.js"
-    },
-    "action": {
-        "default_popup": "popup/popup.html",
-        "default_icon": "icons/icon.png"
-    },
-    "options_page": "options/options.html",
-    "icons": {
-        "128": "icons/icon.png"
-    }
+  "manifest_version": 3,
+  "name": "SLinks – Tabs Exporter",
+  "version": "1.2.0",
+  "description": "選取目前開啟的分頁，匯出為 CSV / TXT，或上傳到 Google Drive。",
+  "permissions": ["scripting", "tabs", "storage", "identity"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": "icons/icon.png"
+  },
+  "options_page": "options/options.html",
+  "icons": {
+    "128": "icons/icon.png"
+  }
 }

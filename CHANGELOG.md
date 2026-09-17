@@ -2,6 +2,25 @@
 
 本專案遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/) 格式。
 
+## [1.2.0] - 2026-09-17
+
+### 新增
+
+- **Google 登入 / 上傳 UI**：popup 與設定頁皆加入「登入 Google」按鈕；popup 新增「上傳選取分頁」按鈕，可依設定頁選擇的方式上傳到 Google Drive 或 Google Sheets。
+- **Google Sheets 支援**：設定頁可選擇上傳方式（不上傳 / Google Drive / Google Sheets），並在選擇 Sheets 時填入目的地試算表 ID；上傳時會將 `時間戳 / 標題 / 網址` 附加到該試算表的 `Sheet1` 工作表。
+- **離線自動重試**：`background.ts` 的 `handleUploadTabs()` 偵測到疑似離線的網路錯誤（`fetch` 拋出 `TypeError`）時，會將待上傳分頁暫存於 `chrome.storage.local`，並在瀏覽器觸發 `online` 事件時自動重試。
+- **Markdown 匯出**：新增 `core/export.ts:toMarkdown()`，popup 新增「Export Markdown」按鈕，可將選取分頁匯出為 `.md` 清單（含匯出時間，若有摘要則以引用區塊附加）；設定頁「匯出格式」新增 Markdown 選項。
+- **單元測試（Vitest）**：新增 `vitest.config.ts` 與 `src/core/__tests__/`，涵蓋 `export.ts`（TXT/CSV/Markdown 轉換）、`storage.ts`（設定讀寫、token 存取、時間戳格式）、`google.ts`（OAuth 授權、Drive/Sheets 上傳的成功與失敗情境，皆以 `vi.stubGlobal` 模擬 `chrome` 與 `fetch`），共 19 個測試，`npm run test` 一鍵執行。
+- **ESLint + Prettier**：新增 `eslint.config.mjs`（flat config + typescript-eslint + eslint-config-prettier）與 `.prettierrc.json`／`.prettierignore`，並提供 `lint` / `lint:fix` / `format` / `format:check` 指令；全專案程式碼已通過檢查與格式化。
+
+### 變更
+
+- `RuntimeMessage` 中的 `UploadTabsMessage` 由 `{ urls: string[] }` 改為 `{ tabs: UploadableTab[] }`，讓 Google Sheets 上傳能同時取得標題與時間戳，而不只是網址。
+- `core/google.ts:uploadToGoogleSheets()` 改吃輕量的 `UploadableTab[]`（不再需要 `TabRecord` 的 `summary` 欄位），並修正 Sheets API 呼叫網址（原本缺少工作表名稱，改為固定寫入 `Sheet1!A1:append`）。
+- `manifest.json` / `package.json` 版本號更新為 `1.2.0`。
+
+---
+
 ## [1.1.0] - 2026-09-17
 
 ### 重構

@@ -10,7 +10,14 @@ export interface TabRecord {
   summary: string;
 }
 
-export type ExportFormat = "txt" | "csv";
+/** 上傳到 Google Drive / Sheets 用的精簡分頁資訊（不需要摘要） */
+export interface UploadableTab {
+  title: string;
+  url: string;
+  timestamp: string;
+}
+
+export type ExportFormat = "txt" | "csv" | "md";
 export type UploadMethod = "none" | "drive" | "sheets";
 
 /** 儲存在 chrome.storage.sync 的使用者設定 */
@@ -30,7 +37,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 /** popup -> background 的訊息型別 */
 export interface UploadTabsMessage {
   action: "uploadTabs";
-  urls: string[];
+  tabs: UploadableTab[];
 }
 
 export interface AuthenticateMessage {

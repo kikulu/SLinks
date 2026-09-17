@@ -1,46 +1,99 @@
-@import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap");
 
 body {
-    font-family: 'Merriweather', serif;
-    background: linear-gradient(135deg, #00aaff, #0088cc);
-    color: white;
-    text-align: center;
-    padding: 20px;
+  font-family: "Merriweather", serif;
+  background: linear-gradient(135deg, #00aaff, #0088cc);
+  color: white;
+  text-align: center;
+  padding: 20px;
 }
 
 .container {
-    background: white;
-    color: #333;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
-    max-width: 400px;
-    margin: auto;
+  background: white;
+  color: #333;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+  max-width: 400px;
+  margin: auto;
 }
 
 .logo-header {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
 }
 
 .logo-header img {
-    width: 40px;
-    height: 40px;
+  width: 40px;
+  height: 40px;
 }
 
 .title {
-    font-size: 20px;
-    font-weight: bold;
+  font-size: 20px;
+  font-weight: bold;
 }
 
 label {
-    display: inline-block;
-    margin: 6px 0;
+  display: inline-block;
+  margin: 6px 0;
+}
+
+h3 {
+  text-align: left;
+  margin: 14px 0 6px;
+  font-size: 15px;
+}
+
+.sheet-id-row {
+  text-align: left;
+  margin: 8px 0;
+}
+
+.sheet-id-row label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.sheet-id-row input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+#googleLogin {
+  font-family: "Merriweather", serif;
+  background: #0088cc;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+#googleLogin:disabled {
+  background: #99c2d6;
+  cursor: not-allowed;
+}
+
+.status {
+  font-size: 13px;
+  color: green;
+  min-height: 16px;
+  text-align: left;
+}
+
+.status.error-text {
+  color: red;
 }
 
 p {
-    font-size: 14px;
-    color: green;
+  font-size: 14px;
+  color: green;
 }

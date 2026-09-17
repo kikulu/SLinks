@@ -1,7 +1,8 @@
 /**
  * 封裝 chrome.storage 存取邏輯，統一管理設定與 Google 授權 token。
  */
-import { AppSettings, DEFAULT_SETTINGS } from "../types";
+import type { AppSettings } from "../types";
+import { DEFAULT_SETTINGS } from "../types";
 
 export async function getSettings(): Promise<AppSettings> {
   const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);

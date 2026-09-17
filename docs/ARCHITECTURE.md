@@ -14,31 +14,56 @@
         ▼
    列出目前所有分頁（排除 chrome:// 等受限頁面）
         │
-        ├─ 點擊 Export Txt ──▶ core/export.ts:toTxt()  ──▶ downloadFile()
+        ├─ 點擊 Export Txt ──▶ core/export.ts:toTxt()      ──▶ downloadFile()
         │
-        └─ 點擊 Export Csv ──▶ 逐一以 chrome.scripting.executeScript
-                               擷取 meta description
-                               ──▶ core/export.ts:toCsv() ──▶ downloadFile()
+        ├─ 點擊 Export Markdown ──▶ core/export.ts:toMarkdown() ──▶ downloadFile()
+        │
+        ├─ 點擊 Export Csv ──▶ 逐一以 chrome.scripting.executeScript
+        │                      擷取 meta description
+        │                      ──▶ core/export.ts:toCsv() ──▶ downloadFile()
+        │
+        ├─ 點擊「登入 Google」──▶ chrome.runtime.sendMessage({action:"authenticate"})
+        │                        ──▶ background.ts ──▶ core/google.ts:authenticateWithGoogle()
+        │
+        └─ 點擊「上傳選取分頁」──▶ chrome.runtime.sendMessage({action:"uploadTabs", tabs})
+                                 ──▶ background.ts:handleUploadTabs()
+                                     ├─ settings.uploadMethod === "drive"  → uploadToGoogleDrive()
+                                     ├─ settings.uploadMethod === "sheets" → uploadToGoogleSheets()
+                                     └─ 網路離線（fetch 拋出 TypeError）
+                                        → 暫存 chrome.storage.local.offlineTabs
+                                        → self.addEventListener("online", …) 時自動重試
 ```
 
-設定頁（`options/options.ts`）負責讀寫 `chrome.storage.sync` 中的 `exportFormat` 等偏好設定，供未來 popup 讀取預設匯出格式使用。
+設定頁（`options/options.ts`）負責讀寫 `chrome.storage.sync` 中的偏好設定：
 
-`background.ts`（Service Worker）目前處理兩類跨情境訊息：
+- `exportFormat`：txt / csv / md，供 popup 讀取預設匯出格式使用（目前 popup 三個匯出按鈕皆可直接點擊，此設定作為未來「預設格式」使用的基礎）
+- `uploadMethod`：none / drive / sheets，決定「上傳選取分頁」的實際行為
+- `sheetId`：`uploadMethod` 為 `sheets` 時，附加資料的目的地試算表 ID
+- 頁面也提供「登入 Google」按鈕，與 popup 共用同一套 `chrome.runtime.sendMessage({action:"authenticate"})` 流程
 
-- `action: "uploadTabs"`：呼叫 `core/google.ts` 中的 `uploadToGoogleDrive()`，將網址清單上傳為文字檔。
+`background.ts`（Service Worker）處理兩類跨情境訊息：
+
+- `action: "uploadTabs"`：交由 `handleUploadTabs()` 依 `AppSettings.uploadMethod` 路由到 `uploadToGoogleDrive()` 或 `uploadToGoogleSheets()`；偵測到疑似離線的網路錯誤時，會將資料存入 `chrome.storage.local.offlineTabs`，並在 `online` 事件觸發時自動重試。
 - `action: "authenticate"`：呼叫 `authenticateWithGoogle()`，透過 `chrome.identity.launchWebAuthFlow` 取得 OAuth token 並存入 `chrome.storage.sync`。
 
 ## 模組職責
 
 | 檔案 | 職責 |
 |------|------|
-| `src/types.ts` | 定義 `TabRecord`、`AppSettings`、跨頁面訊息型別等共用介面，確保 popup / options / background 之間型別一致 |
+| `src/types.ts` | 定義 `TabRecord`、`UploadableTab`、`AppSettings`、跨頁面訊息型別等共用介面，確保 popup / options / background 之間型別一致 |
 | `src/core/storage.ts` | 封裝所有 `chrome.storage` 讀寫，統一預設值與時間戳格式 |
-| `src/core/export.ts` | 純函式：將 `TabRecord[]` 轉為 TXT / CSV 字串，並提供瀏覽器下載的共用邏輯（不依賴 chrome.* API，方便日後撰寫單元測試） |
+| `src/core/export.ts` | 純函式：將 `TabRecord[]` 轉為 TXT / CSV / Markdown 字串，並提供瀏覽器下載的共用邏輯（不依賴 chrome.* API，方便撰寫單元測試） |
 | `src/core/google.ts` | Google OAuth 授權、Google Drive 上傳、Google Sheets 寫入，全部回傳 `Promise`，並在失敗時拋出有意義的錯誤訊息 |
-| `src/background.ts` | Service Worker 進入點，處理訊息路由與離線佇列重試 |
-| `src/popup/popup.ts` | 彈出視窗的 DOM 操作與互動邏輯 |
-| `src/options/options.ts` | 設定頁的 DOM 操作與互動邏輯 |
+| `src/background.ts` | Service Worker 進入點，處理訊息路由（依設定決定 Drive / Sheets）與離線佇列重試 |
+| `src/popup/popup.ts` | 彈出視窗的 DOM 操作與互動邏輯（匯出 TXT/CSV/Markdown、登入 Google、上傳選取分頁） |
+| `src/options/options.ts` | 設定頁的 DOM 操作與互動邏輯（匯出格式、上傳方式、Sheets ID、登入 Google） |
+| `src/core/__tests__/*.test.ts` | Vitest 單元測試：`export.test.ts` 涵蓋 TXT/CSV/Markdown 轉換；`storage.test.ts`、`google.test.ts` 透過 `vi.stubGlobal("chrome", …)` 模擬 Chrome API 與 `fetch`，測試授權與上傳流程（含成功、失敗、缺少設定等情境） |
+
+## 開發輔助工具
+
+- **Vitest**：純邏輯模組（`core/*`）的單元測試，透過 mock `chrome` 全域物件與 `fetch` 隔離瀏覽器環境，可在 Node.js 中直接執行（`npm run test`）。
+- **ESLint（flat config, `eslint.config.mjs`）+ typescript-eslint**：型別感知的程式碼檢查，搭配 `eslint-config-prettier` 關閉與 Prettier 衝突的排版規則。
+- **Prettier**：統一縮排、引號、逗號等排版風格（`npm run format`）。
 
 ## 設計原則
 

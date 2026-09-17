@@ -4,7 +4,7 @@
  * 使用前請先在 Google Cloud Console 建立 OAuth Client ID（類型：Chrome App），
  * 並將下方 GOOGLE_CLIENT_ID 換成你自己的憑證。
  */
-import { TabRecord } from "../types";
+import type { UploadableTab } from "../types";
 import { getAccessToken, getTimestamp, setAccessToken } from "./storage";
 
 const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
@@ -71,16 +71,20 @@ export async function uploadToGoogleDrive(urls: string[]): Promise<void> {
 }
 
 /** 將分頁資訊附加到指定的 Google Sheets 試算表 */
-export async function uploadToGoogleSheets(tabs: TabRecord[], sheetId: string): Promise<void> {
+export async function uploadToGoogleSheets(tabs: UploadableTab[], sheetId: string): Promise<void> {
   const token = await getAccessToken();
   if (!token) {
     throw new Error("尚未登入 Google！");
   }
+  if (!sheetId) {
+    throw new Error("尚未設定 Google Sheets ID，請至設定頁填寫。");
+  }
 
   const values = tabs.map((tab) => [tab.timestamp, tab.title, tab.url]);
 
+  // 預設寫入第一個工作表（分頁名稱 "Sheet1"）的 A 欄之後
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:append?valueInputOption=RAW`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=RAW`,
     {
       method: "POST",
       headers: {

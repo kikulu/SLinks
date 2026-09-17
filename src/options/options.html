@@ -1,20 +1,36 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-Hant">
-<head>
-  <meta charset="UTF-8" />
-  <title>Settings</title>
-  <link rel="stylesheet" href="options.css" />
-</head>
-<body>
-  <div class="container">
-    <div class="logo-header">
-      <img src="../icons/settings.png" alt="Logo" />
-      <span class="title">Settings</span>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="logo-header">
+        <img src="../icons/settings.png" alt="Logo" />
+        <span class="title">Settings</span>
+      </div>
+
+      <h3>Export Format</h3>
+      <label><input type="radio" name="exportFormat" value="txt" /> Txt</label><br />
+      <label><input type="radio" name="exportFormat" value="csv" /> CSV</label><br />
+      <label><input type="radio" name="exportFormat" value="md" /> Markdown</label>
+
+      <h3>上傳方式</h3>
+      <label><input type="radio" name="uploadMethod" value="none" /> 不上傳</label><br />
+      <label><input type="radio" name="uploadMethod" value="drive" /> Google Drive</label><br />
+      <label><input type="radio" name="uploadMethod" value="sheets" /> Google Sheets</label>
+
+      <div id="sheetIdRow" class="sheet-id-row">
+        <label for="sheetId">Google Sheets ID</label>
+        <input type="text" id="sheetId" placeholder="試算表網址中 /d/ 與 /edit 之間的字串" />
+      </div>
+
+      <h3>Google 帳號</h3>
+      <button id="googleLogin">登入 Google</button>
+      <p id="authStatus" class="status"></p>
     </div>
-    <h3>Export Format</h3>
-    <label><input type="radio" name="exportFormat" value="txt" /> Txt</label><br />
-    <label><input type="radio" name="exportFormat" value="csv" /> CSV</label>
-  </div>
-  <script src="options.js"></script>
-</body>
+    <script src="options.js"></script>
+  </body>
 </html>
