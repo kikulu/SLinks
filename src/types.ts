@@ -25,6 +25,8 @@ export interface AppSettings {
   exportFormat: ExportFormat;
   uploadMethod: UploadMethod;
   autoUpload: boolean;
+  /** 自動上傳的間隔（分鐘），僅在 autoUpload 為 true 時生效 */
+  autoUploadIntervalMinutes: number;
   sheetId?: string;
 }
 
@@ -32,6 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   exportFormat: "txt",
   uploadMethod: "none",
   autoUpload: false,
+  autoUploadIntervalMinutes: 30,
 };
 
 /** popup -> background 的訊息型別 */
@@ -44,7 +47,11 @@ export interface AuthenticateMessage {
   action: "authenticate";
 }
 
-export type RuntimeMessage = UploadTabsMessage | AuthenticateMessage;
+export interface SignOutMessage {
+  action: "signOut";
+}
+
+export type RuntimeMessage = UploadTabsMessage | AuthenticateMessage | SignOutMessage;
 
 export interface RuntimeResponse {
   success: boolean;

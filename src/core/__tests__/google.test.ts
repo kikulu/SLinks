@@ -125,17 +125,99 @@ describe("core/google", () => {
       vi.stubGlobal("chrome", createChromeMock({}));
       const { setAccessToken } = await import("../storage");
       await setAccessToken("token-xyz");
-      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+      const fetchMock = vi
+        .fn()
+        // header 檢查：假裝已經有內容，跳過建立表頭
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ values: [["Timestamp", "Title", "URL"]] }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200 });
       vi.stubGlobal("fetch", fetchMock);
 
       const { uploadToGoogleSheets } = await import("../google");
       const tabs: UploadableTab[] = [{ title: "A", url: "https://a.com", timestamp: "t" }];
       await uploadToGoogleSheets(tabs, "sheet-id-123");
 
-      const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const [url] = fetchMock.mock.calls[1] as [string, RequestInit];
       expect(url).toBe(
         "https://sheets.googleapis.com/v4/spreadsheets/sheet-id-123/values/Sheet1!A1:append?valueInputOption=RAW"
       );
+    });
+
+    it("writes a header row first when the sheet is empty, then appends the data", async () => {
+      vi.stubGlobal("chrome", createChromeMock({}));
+      const { setAccessToken } = await import("../storage");
+      await setAccessToken("token-xyz");
+
+      const fetchMock = vi
+        .fn()
+        // 1) 檢查表頭：回傳空內容
+        .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({}) })
+        // 2) 寫入表頭
+        .mockResolvedValueOnce({ ok: true, status: 200 })
+        // 3) 附加資料
+        .mockResolvedValueOnce({ ok: true, status: 200 });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { uploadToGoogleSheets } = await import("../google");
+      const tabs: UploadableTab[] = [{ title: "A", url: "https://a.com", timestamp: "t" }];
+      await uploadToGoogleSheets(tabs, "sheet-id-123");
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const [, headerInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+      expect(headerInit.method).toBe("PUT");
+      expect(JSON.parse(headerInit.body as string)).toEqual({
+        values: [["Timestamp", "Title", "URL"]],
+      });
+    });
+
+    it("throws when the header-check request fails", async () => {
+      vi.stubGlobal("chrome", createChromeMock({}));
+      const { setAccessToken } = await import("../storage");
+      await setAccessToken("token-xyz");
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+
+      const { uploadToGoogleSheets } = await import("../google");
+      const tabs: UploadableTab[] = [{ title: "A", url: "https://a.com", timestamp: "t" }];
+      await expect(uploadToGoogleSheets(tabs, "sheet-id-123")).rejects.toThrow("500");
+    });
+  });
+
+  describe("signOutFromGoogle", () => {
+    it("clears the stored token even when a revoke request is made", async () => {
+      vi.stubGlobal("chrome", createChromeMock({}));
+      const { setAccessToken, getAccessToken } = await import("../storage");
+      await setAccessToken("token-xyz");
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+
+      const { signOutFromGoogle } = await import("../google");
+      await signOutFromGoogle();
+
+      expect(await getAccessToken()).toBeUndefined();
+    });
+
+    it("still clears the token when the revoke request fails (e.g. offline)", async () => {
+      vi.stubGlobal("chrome", createChromeMock({}));
+      const { setAccessToken, getAccessToken } = await import("../storage");
+      await setAccessToken("token-xyz");
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+      const { signOutFromGoogle } = await import("../google");
+      await expect(signOutFromGoogle()).resolves.toBeUndefined();
+      expect(await getAccessToken()).toBeUndefined();
+    });
+
+    it("does nothing (no network call) when no token is stored", async () => {
+      vi.stubGlobal("chrome", createChromeMock({}));
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { signOutFromGoogle } = await import("../google");
+      await signOutFromGoogle();
+
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 });

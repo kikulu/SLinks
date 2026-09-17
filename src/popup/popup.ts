@@ -1,23 +1,11 @@
 /**
  * 彈出視窗：列出目前所有分頁，讓使用者勾選並匯出為 TXT / CSV / Markdown，
- * 或透過 background.ts 上傳到 Google Drive / Google Sheets。
+ * 或透過 background.ts 上傳到 Google Drive / Google Sheets，並可登入／登出 Google。
  */
 import type { RuntimeMessage, RuntimeResponse, TabRecord, UploadableTab } from "../types";
 import { downloadFile, toCsv, toMarkdown, toTxt } from "../core/export";
 import { getAccessToken, getTimestamp } from "../core/storage";
-
-function isRestrictedUrl(url?: string): boolean {
-  return (
-    !url ||
-    url.startsWith("chrome://") ||
-    url.startsWith("chrome-extension://") ||
-    url.startsWith("edge://")
-  );
-}
-
-function truncateTitle(title: string, max = 40): string {
-  return title.length > max ? `${title.slice(0, max)}...` : title;
-}
+import { isRestrictedUrl, truncateTitle } from "../core/tabs";
 
 /** 透過 chrome.scripting 擷取頁面 meta description（失敗時回傳提示字串） */
 async function fetchDescription(tabId: number): Promise<string> {
@@ -93,9 +81,15 @@ async function sendRuntimeMessage(message: RuntimeMessage): Promise<RuntimeRespo
   return (await chrome.runtime.sendMessage(message)) as RuntimeResponse;
 }
 
-async function refreshGoogleStatus(): Promise<void> {
-  const token = await getAccessToken();
-  showStatus(token ? "已登入 Google ✅" : "尚未登入 Google");
+function setGoogleButtonsState(
+  isLoggedIn: boolean,
+  buttons: {
+    loginButton: HTMLButtonElement;
+    logoutButton: HTMLButtonElement;
+  }
+): void {
+  buttons.loginButton.disabled = isLoggedIn;
+  buttons.logoutButton.disabled = !isLoggedIn;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -105,10 +99,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const exportCsvButton = document.getElementById("exportCsv") as HTMLButtonElement;
   const exportMdButton = document.getElementById("exportMd") as HTMLButtonElement;
   const googleLoginButton = document.getElementById("googleLogin") as HTMLButtonElement;
+  const googleLogoutButton = document.getElementById("googleLogout") as HTMLButtonElement;
   const uploadSelectedButton = document.getElementById("uploadSelected") as HTMLButtonElement;
   let isAllSelected = false;
 
   chrome.tabs.query({}, (tabs) => renderTabsList(tabsList, tabs));
+
+  const refreshGoogleStatus = async (): Promise<void> => {
+    const token = await getAccessToken();
+    setGoogleButtonsState(Boolean(token), {
+      loginButton: googleLoginButton,
+      logoutButton: googleLogoutButton,
+    });
+    showStatus(token ? "已登入 Google ✅" : "尚未登入 Google");
+  };
   void refreshGoogleStatus();
 
   selectAllButton.addEventListener("click", () => {
@@ -196,14 +200,31 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await sendRuntimeMessage({ action: "authenticate" });
       if (response.success) {
-        showStatus("已登入 Google ✅");
+        await refreshGoogleStatus();
       } else {
         showStatus(response.error ?? "Google 授權失敗", true);
+        googleLoginButton.disabled = false;
       }
     } catch (error) {
       showStatus((error as Error).message, true);
-    } finally {
       googleLoginButton.disabled = false;
+    }
+  });
+
+  googleLogoutButton.addEventListener("click", async () => {
+    showStatus("登出中...");
+    googleLogoutButton.disabled = true;
+    try {
+      const response = await sendRuntimeMessage({ action: "signOut" });
+      if (response.success) {
+        await refreshGoogleStatus();
+      } else {
+        showStatus(response.error ?? "登出失敗", true);
+        googleLogoutButton.disabled = false;
+      }
+    } catch (error) {
+      showStatus((error as Error).message, true);
+      googleLogoutButton.disabled = false;
     }
   });
 

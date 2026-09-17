@@ -2,6 +2,25 @@
 
 本專案遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/) 格式。
 
+## [1.3.0] - 2026-09-17
+
+### 新增
+
+- **自動上傳**：設定頁新增「定期自動上傳目前所有分頁」勾選項與間隔選擇（15 / 30 / 60 / 180 分鐘）。新增 `core/schedule.ts:getAutoUploadAlarmConfig()` 純函式決定排程設定，`background.ts` 以 `chrome.alarms` 實作定期觸發，並在 `chrome.storage.onChanged` / `onStartup` / `onInstalled` 時自動重新排程；`uploadMethod` 改回「不上傳」時會一併關閉自動上傳。
+- **登出 Google**：popup 與設定頁皆新增「登出 Google」按鈕；新增 `core/google.ts:signOutFromGoogle()`，會嘗試呼叫 Google 的 token revoke endpoint（失敗也不阻擋），並清除本機儲存的 access token。登入／登出按鈕會依目前登入狀態自動切換可用狀態。
+- **CI（GitHub Actions）**：新增 `.github/workflows/ci.yml`，於 push / PR 到 `main`/`master` 時，在 Node 18.x / 20.x 上依序執行 `typecheck` → `lint` → `format:check` → `test` → `build`，並保留建置輸出為 artifact；README 加上對應的 CI 徽章。
+- **Google Sheets 自動建立表頭列**：`uploadToGoogleSheets()` 上傳前會先呼叫新增的 `ensureSheetHeader()` 檢查 `Sheet1` 是否已有內容，若是空的則自動寫入 `Timestamp / Title / URL` 表頭列，再附加實際資料。
+
+### 變更
+
+- 新增 `AppSettings.autoUploadIntervalMinutes`（預設 30 分鐘）欄位。
+- 重構：抽出 `core/tabs.ts`（`isRestrictedUrl()` / `truncateTitle()` / `tabToUploadable()`），供 `popup.ts` 與 `background.ts` 共用，避免重複程式碼。
+- 新增 `SignOutMessage` 訊息型別，`RuntimeMessage` 聯集型別隨之更新。
+- `manifest.json` 新增 `alarms` 權限；`manifest.json` / `package.json` 版本號更新為 `1.3.0`。
+- 新增 11 個 `tabs.ts` 測試、4 個 `schedule.ts` 測試，以及 `google.ts` 新增的登出／表頭建立測試，單元測試總數由 19 個增加到 39 個。
+
+---
+
 ## [1.2.0] - 2026-09-17
 
 ### 新增

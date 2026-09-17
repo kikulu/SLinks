@@ -5,7 +5,7 @@
  * 並將下方 GOOGLE_CLIENT_ID 換成你自己的憑證。
  */
 import type { UploadableTab } from "../types";
-import { getAccessToken, getTimestamp, setAccessToken } from "./storage";
+import { clearAccessToken, getAccessToken, getTimestamp, setAccessToken } from "./storage";
 
 const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
@@ -44,6 +44,22 @@ export async function authenticateWithGoogle(): Promise<string> {
   });
 }
 
+/** 登出 Google：撤銷 token（盡力而為）並清除本機儲存的 token */
+export async function signOutFromGoogle(): Promise<void> {
+  const token = await getAccessToken();
+  if (token) {
+    try {
+      await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+    } catch {
+      // 撤銷請求失敗（例如離線）不應阻擋本機登出，token 仍會被清除
+    }
+  }
+  await clearAccessToken();
+}
+
 /** 將網址清單以純文字檔上傳到 Google Drive */
 export async function uploadToGoogleDrive(urls: string[]): Promise<void> {
   const token = await getAccessToken();
@@ -70,7 +86,43 @@ export async function uploadToGoogleDrive(urls: string[]): Promise<void> {
   }
 }
 
-/** 將分頁資訊附加到指定的 Google Sheets 試算表 */
+const SHEET_HEADER_ROW = ["Timestamp", "Title", "URL"];
+
+/** 檢查試算表 Sheet1 是否已有內容，若是空的則先寫入表頭列 */
+async function ensureSheetHeader(sheetId: string, token: string): Promise<void> {
+  const checkResponse = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:C1`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (!checkResponse.ok) {
+    throw new Error(`讀取 Google Sheets 內容失敗（HTTP ${checkResponse.status}）`);
+  }
+
+  const existing = (await checkResponse.json()) as { values?: string[][] };
+  const hasContent = Boolean(existing.values && existing.values.length > 0);
+  if (hasContent) {
+    return;
+  }
+
+  const headerResponse = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:C1?valueInputOption=RAW`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ values: [SHEET_HEADER_ROW] }),
+    }
+  );
+
+  if (!headerResponse.ok) {
+    throw new Error(`建立 Google Sheets 表頭列失敗（HTTP ${headerResponse.status}）`);
+  }
+}
+
+/** 將分頁資訊附加到指定的 Google Sheets 試算表（首次使用時會自動建立表頭列） */
 export async function uploadToGoogleSheets(tabs: UploadableTab[], sheetId: string): Promise<void> {
   const token = await getAccessToken();
   if (!token) {
@@ -79,6 +131,8 @@ export async function uploadToGoogleSheets(tabs: UploadableTab[], sheetId: strin
   if (!sheetId) {
     throw new Error("尚未設定 Google Sheets ID，請至設定頁填寫。");
   }
+
+  await ensureSheetHeader(sheetId, token);
 
   const values = tabs.map((tab) => [tab.timestamp, tab.title, tab.url]);
 

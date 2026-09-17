@@ -25,26 +25,48 @@
         ├─ 點擊「登入 Google」──▶ chrome.runtime.sendMessage({action:"authenticate"})
         │                        ──▶ background.ts ──▶ core/google.ts:authenticateWithGoogle()
         │
+        ├─ 點擊「登出 Google」──▶ chrome.runtime.sendMessage({action:"signOut"})
+        │                        ──▶ background.ts ──▶ core/google.ts:signOutFromGoogle()
+        │
         └─ 點擊「上傳選取分頁」──▶ chrome.runtime.sendMessage({action:"uploadTabs", tabs})
                                  ──▶ background.ts:handleUploadTabs()
                                      ├─ settings.uploadMethod === "drive"  → uploadToGoogleDrive()
                                      ├─ settings.uploadMethod === "sheets" → uploadToGoogleSheets()
+                                     │   └─ ensureSheetHeader()：Sheet1 為空時先寫入表頭列
                                      └─ 網路離線（fetch 拋出 TypeError）
                                         → 暫存 chrome.storage.local.offlineTabs
                                         → self.addEventListener("online", …) 時自動重試
+
+背景頁另外透過 chrome.alarms 定期觸發「自動上傳」：
+
+chrome.storage.onChanged（autoUpload / uploadMethod / autoUploadIntervalMinutes）
+  或 chrome.runtime.onStartup / onInstalled
+        │
+        ▼
+  background.ts:scheduleAutoUpload()
+        │ 呼叫 core/schedule.ts:getAutoUploadAlarmConfig(settings)
+        │（純函式：依 autoUpload / uploadMethod / 間隔分鐘數決定要不要建立鬧鐘）
+        ▼
+  chrome.alarms.create("slinks-auto-upload", { periodInMinutes })
+        │
+        ▼（鬧鐘觸發）
+  chrome.alarms.onAlarm ──▶ chrome.tabs.query({}) ──▶ handleUploadTabs()
 ```
 
 設定頁（`options/options.ts`）負責讀寫 `chrome.storage.sync` 中的偏好設定：
 
 - `exportFormat`：txt / csv / md，供 popup 讀取預設匯出格式使用（目前 popup 三個匯出按鈕皆可直接點擊，此設定作為未來「預設格式」使用的基礎）
-- `uploadMethod`：none / drive / sheets，決定「上傳選取分頁」的實際行為
+- `uploadMethod`：none / drive / sheets，決定「上傳選取分頁」與「自動上傳」的實際行為；改回 `none` 時會一併關閉自動上傳
 - `sheetId`：`uploadMethod` 為 `sheets` 時，附加資料的目的地試算表 ID
-- 頁面也提供「登入 Google」按鈕，與 popup 共用同一套 `chrome.runtime.sendMessage({action:"authenticate"})` 流程
+- `autoUpload` / `autoUploadIntervalMinutes`：是否啟用自動上傳，以及間隔分鐘數（15 / 30 / 60 / 180），只有在 `uploadMethod` 不是 `none` 時才可勾選
+- 頁面也提供「登入 Google」「登出 Google」按鈕，與 popup 共用同一套 `chrome.runtime.sendMessage()` 流程
 
-`background.ts`（Service Worker）處理兩類跨情境訊息：
+`background.ts`（Service Worker）處理三類跨情境訊息，並負責自動上傳的排程：
 
 - `action: "uploadTabs"`：交由 `handleUploadTabs()` 依 `AppSettings.uploadMethod` 路由到 `uploadToGoogleDrive()` 或 `uploadToGoogleSheets()`；偵測到疑似離線的網路錯誤時，會將資料存入 `chrome.storage.local.offlineTabs`，並在 `online` 事件觸發時自動重試。
 - `action: "authenticate"`：呼叫 `authenticateWithGoogle()`，透過 `chrome.identity.launchWebAuthFlow` 取得 OAuth token 並存入 `chrome.storage.sync`。
+- `action: "signOut"`：呼叫 `signOutFromGoogle()`，盡力撤銷 token（`fetch` 到 Google 的 revoke endpoint，失敗也不阻擋）並清除本機儲存的 token。
+- `scheduleAutoUpload()`：在 `chrome.storage.onChanged`（自動上傳相關欄位變動時）、`chrome.runtime.onStartup`、`chrome.runtime.onInstalled` 時呼叫，依目前設定重建或取消名為 `slinks-auto-upload` 的 `chrome.alarms` 鬧鐘；鬧鐘觸發時會查詢目前所有分頁並呼叫 `handleUploadTabs()`。
 
 ## 模組職責
 
@@ -53,17 +75,20 @@
 | `src/types.ts` | 定義 `TabRecord`、`UploadableTab`、`AppSettings`、跨頁面訊息型別等共用介面，確保 popup / options / background 之間型別一致 |
 | `src/core/storage.ts` | 封裝所有 `chrome.storage` 讀寫，統一預設值與時間戳格式 |
 | `src/core/export.ts` | 純函式：將 `TabRecord[]` 轉為 TXT / CSV / Markdown 字串，並提供瀏覽器下載的共用邏輯（不依賴 chrome.* API，方便撰寫單元測試） |
-| `src/core/google.ts` | Google OAuth 授權、Google Drive 上傳、Google Sheets 寫入，全部回傳 `Promise`，並在失敗時拋出有意義的錯誤訊息 |
-| `src/background.ts` | Service Worker 進入點，處理訊息路由（依設定決定 Drive / Sheets）與離線佇列重試 |
-| `src/popup/popup.ts` | 彈出視窗的 DOM 操作與互動邏輯（匯出 TXT/CSV/Markdown、登入 Google、上傳選取分頁） |
-| `src/options/options.ts` | 設定頁的 DOM 操作與互動邏輯（匯出格式、上傳方式、Sheets ID、登入 Google） |
-| `src/core/__tests__/*.test.ts` | Vitest 單元測試：`export.test.ts` 涵蓋 TXT/CSV/Markdown 轉換；`storage.test.ts`、`google.test.ts` 透過 `vi.stubGlobal("chrome", …)` 模擬 Chrome API 與 `fetch`，測試授權與上傳流程（含成功、失敗、缺少設定等情境） |
+| `src/core/google.ts` | Google OAuth 授權、登出（撤銷 token）、Google Drive 上傳、Google Sheets 寫入（含自動偵測並建立表頭列），全部回傳 `Promise`，並在失敗時拋出有意義的錯誤訊息 |
+| `src/core/tabs.ts` | popup / background 共用的分頁工具：`isRestrictedUrl()`、`truncateTitle()`、`tabToUploadable()`，避免同一段邏輯在兩處各寫一份 |
+| `src/core/schedule.ts` | 純函式 `getAutoUploadAlarmConfig()`：依 `AppSettings` 決定「自動上傳」鬧鐘要不要建立、間隔多久，不依賴 `chrome.alarms`，方便單元測試 |
+| `src/background.ts` | Service Worker 進入點，處理訊息路由（依設定決定 Drive / Sheets / 登出）、離線佇列重試，以及自動上傳的 `chrome.alarms` 排程管理 |
+| `src/popup/popup.ts` | 彈出視窗的 DOM 操作與互動邏輯（匯出 TXT/CSV/Markdown、登入／登出 Google、上傳選取分頁） |
+| `src/options/options.ts` | 設定頁的 DOM 操作與互動邏輯（匯出格式、上傳方式、Sheets ID、自動上傳開關與間隔、登入／登出 Google） |
+| `src/core/__tests__/*.test.ts` | Vitest 單元測試：`export.test.ts`（TXT/CSV/Markdown 轉換）、`tabs.test.ts`（受限網址判斷、標題截斷、分頁轉換）、`schedule.test.ts`（自動上傳鬧鐘設定）、`storage.test.ts`、`google.test.ts`（透過 `vi.stubGlobal("chrome", …)` 模擬 Chrome API 與 `fetch`，測試授權、登出、Drive/Sheets 上傳與表頭建立的成功／失敗情境） |
 
 ## 開發輔助工具
 
 - **Vitest**：純邏輯模組（`core/*`）的單元測試，透過 mock `chrome` 全域物件與 `fetch` 隔離瀏覽器環境，可在 Node.js 中直接執行（`npm run test`）。
 - **ESLint（flat config, `eslint.config.mjs`）+ typescript-eslint**：型別感知的程式碼檢查，搭配 `eslint-config-prettier` 關閉與 Prettier 衝突的排版規則。
 - **Prettier**：統一縮排、引號、逗號等排版風格（`npm run format`）。
+- **GitHub Actions（`.github/workflows/ci.yml`）**：每次 push 或 PR 到 `main`/`master` 時，於 Node 18.x 與 20.x 兩個版本上依序執行 `typecheck` → `lint` → `format:check` → `test` → `build`，並將 Node 20.x 的 `dist/` 建置輸出保留為 workflow artifact 供下載檢視。
 
 ## 設計原則
 

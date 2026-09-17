@@ -1,10 +1,18 @@
 /**
  * Manifest V3 Service Worker
- * 負責處理 popup 傳來的訊息（上傳 / 授權），以及離線佇列的自動補上傳。
+ * 負責處理 popup 傳來的訊息（上傳 / 授權 / 登出）、離線佇列的自動補上傳，
+ * 以及「自動上傳」功能的鬧鐘排程。
  */
 import type { RuntimeMessage, RuntimeResponse, UploadableTab } from "./types";
-import { getSettings } from "./core/storage";
-import { authenticateWithGoogle, uploadToGoogleDrive, uploadToGoogleSheets } from "./core/google";
+import { getSettings, getTimestamp } from "./core/storage";
+import {
+  authenticateWithGoogle,
+  signOutFromGoogle,
+  uploadToGoogleDrive,
+  uploadToGoogleSheets,
+} from "./core/google";
+import { getAutoUploadAlarmConfig, AUTO_UPLOAD_ALARM_NAME } from "./core/schedule";
+import { isRestrictedUrl, tabToUploadable } from "./core/tabs";
 
 /**
  * 依照使用者在設定頁選擇的上傳方式，將分頁資訊上傳到 Google Drive 或 Google Sheets。
@@ -51,6 +59,13 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
+    if (message.action === "signOut") {
+      signOutFromGoogle()
+        .then(() => sendResponse({ success: true }))
+        .catch((error: Error) => sendResponse({ success: false, error: error.message }));
+      return true;
+    }
+
     return false;
   }
 );
@@ -67,8 +82,53 @@ self.addEventListener("online", () => {
   });
 });
 
+/** 依目前設定重新排程（或取消）「自動上傳」鬧鐘 */
+async function scheduleAutoUpload(): Promise<void> {
+  const settings = await getSettings();
+  await chrome.alarms.clear(AUTO_UPLOAD_ALARM_NAME);
+
+  const alarmConfig = getAutoUploadAlarmConfig(settings);
+  if (alarmConfig) {
+    chrome.alarms.create(AUTO_UPLOAD_ALARM_NAME, alarmConfig);
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== AUTO_UPLOAD_ALARM_NAME) {
+    return;
+  }
+  chrome.tabs.query({}, (tabs) => {
+    const timestamp = getTimestamp();
+    const uploadable = tabs
+      .filter((tab) => !isRestrictedUrl(tab.url))
+      .map((tab) => tabToUploadable(tab, timestamp));
+
+    if (uploadable.length === 0) {
+      return;
+    }
+    handleUploadTabs(uploadable).catch((error: Error) =>
+      console.error("自動上傳失敗：", error.message)
+    );
+  });
+});
+
+// 設定頁變更「自動上傳」「上傳方式」「間隔」時，即時重新排程鬧鐘
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync") {
+    return;
+  }
+  if (changes.autoUpload || changes.uploadMethod || changes.autoUploadIntervalMinutes) {
+    void scheduleAutoUpload();
+  }
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void scheduleAutoUpload();
+});
+
 chrome.runtime.onInstalled.addListener(() => {
   getSettings().then((settings) => {
     console.log("SLinks 已安裝／更新，目前設定：", settings);
   });
+  void scheduleAutoUpload();
 });

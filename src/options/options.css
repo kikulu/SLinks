@@ -66,7 +66,33 @@ h3 {
   font-family: inherit;
 }
 
-#googleLogin {
+.sheet-id-row select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+}
+
+.button-row button {
+  flex: 1;
+}
+
+.hint {
+  font-size: 12px;
+  color: #777;
+  text-align: left;
+  margin: 4px 0 0;
+}
+
+#googleLogin,
+#googleLogout {
   font-family: "Merriweather", serif;
   background: #0088cc;
   color: white;
@@ -77,7 +103,8 @@ h3 {
   margin-top: 6px;
 }
 
-#googleLogin:disabled {
+#googleLogin:disabled,
+#googleLogout:disabled {
   background: #99c2d6;
   cursor: not-allowed;
 }
