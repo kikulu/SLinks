@@ -1,3 +1,8 @@
+# AI 參與度 ☕
+
+烘焙深度：用咖啡「杯數」表示 AI 介入程度。
+AI做越多，人需要喝的咖啡就越少。
+
 # 🔖 SLinks – Tabs Exporter
 
 [![CI](https://github.com/your-username/tabs-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/tabs-exporter/actions/workflows/ci.yml)
